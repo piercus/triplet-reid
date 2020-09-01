@@ -110,7 +110,7 @@ import functools
 
 import tensorflow as tf
 
-slim = tf.contrib.slim
+import tf_slim as slim
 
 # Conv and DepthSepConv namedtuple define layers of the MobileNet architecture
 # Conv defines 3x3 convolution layers
@@ -196,7 +196,7 @@ def mobilenet_v1_base(inputs,
   if output_stride is not None and output_stride not in [8, 16, 32]:
     raise ValueError('Only allowed output_stride values are 8, 16, 32.')
 
-  with tf.variable_scope(scope, 'MobilenetV1', [inputs]):
+  with tf.compat.v1.variable_scope(scope, 'MobilenetV1', [inputs]):
     with slim.arg_scope([slim.conv2d, slim.separable_conv2d], padding='SAME'):
       # The current_stride variable keeps track of the output stride of the
       # activations, i.e., the running product of convolution strides up to the
@@ -313,7 +313,7 @@ def mobilenet_v1(inputs,
     raise ValueError('Invalid input tensor rank, expected 4, was: %d' %
                      len(input_shape))
 
-  with tf.variable_scope(scope, 'MobilenetV1', [inputs, num_classes],
+  with tf.compat.v1.variable_scope(scope, 'MobilenetV1', [inputs, num_classes],
                          reuse=reuse) as scope:
     with slim.arg_scope([slim.batch_norm, slim.dropout],
                         is_training=is_training):
@@ -321,7 +321,7 @@ def mobilenet_v1(inputs,
                                           min_depth=min_depth,
                                           depth_multiplier=depth_multiplier,
                                           conv_defs=conv_defs)
-      with tf.variable_scope('Logits'):
+      with tf.compat.v1.variable_scope('Logits'):
         kernel_size = _reduced_kernel_size_for_small_input(net, [7, 7])
         net = slim.avg_pool2d(net, kernel_size, padding='VALID',
                               scope='AvgPool_1a')

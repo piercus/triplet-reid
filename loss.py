@@ -1,5 +1,5 @@
 import numbers
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 
 def all_diffs(a, b):

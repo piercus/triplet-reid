@@ -8,7 +8,9 @@ import h5py
 import json
 import numpy as np
 from sklearn.metrics import average_precision_score
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+
+tf.disable_v2_behavior()
 
 import common
 import loss
@@ -192,10 +194,11 @@ def main():
     # Save important data
     if args.filename is not None:
         json.dump({'mAP': mean_ap, 'CMC': list(cmc), 'aps': list(aps)}, args.filename)
-
+    
+    print(len(cmc))
     # Print out a short summary.
-    print('mAP: {:.2%} | top-1: {:.2%} top-2: {:.2%} | top-5: {:.2%} | top-10: {:.2%}'.format(
-        mean_ap, cmc[0], cmc[1], cmc[4], cmc[9]))
+    print('mAP: {:.2%} | top-1: {:.2%} top-2: {:.2%} | top-5: {:.2%} | top-10: {:.2%} | top-20: {:.2%} | top-50: {:.2%}'.format(
+        mean_ap, cmc[0], cmc[1], cmc[4], cmc[9], cmc[19], cmc[49]))
 
 if __name__ == '__main__':
     main()

@@ -11,7 +11,6 @@ import tensorflow as tf
 
 from aggregators import AGGREGATORS
 import common
-tf.compat.v1.disable_v2_behavior()
 
 
 parser = ArgumentParser(description='Embed a dataset using a trained network.')
@@ -33,9 +32,8 @@ parser.add_argument(
     help='Path that will be pre-pended to the filenames in the train_set csv.')
 
 parser.add_argument(
-    '--checkpoint', default=None,
-    help='Name of checkpoint file of the trained network within the experiment '
-         'root. Uses the last checkpoint if not provided.')
+    '--saved_model', default=None,
+    help='Name of the saved model ')
 
 parser.add_argument(
     '--loading_threads', default=8, type=common.positive_int,
@@ -186,49 +184,38 @@ def main():
         modifiers = [o + '_avgpool' for o in modifiers]
     else:
         modifiers = [o + '_resize' for o in modifiers]
-
+    
+    if args.saved_model is None:
+        saved_model = os.path.join(args.experiment_root, 'saved_model.pb')
+    else:
+        saved_model = os.path.join(args.experiment_root, args.saved_model)
+    
     # Group it back into PK batches.
     dataset = dataset.batch(args.batch_size)
 
     # Overlap producing and consuming.
     dataset = dataset.prefetch(1)
+    
+    images_iterator = iter(dataset)
 
-    images, _, _ = tf.compat.v1.data.make_one_shot_iterator(dataset).get_next()
+    # Create the model
+    model = tf.compat.v1.saved_model.load_v2(saved_model).signatures['serving_default']
 
-    # Create the model and an embedding head.
-    print(args)
-    model = import_module('nets.' + args.model_name)
-    head = import_module('heads.' + args.head_name)
-    images = tf.identity(images, name="images")
-
-    endpoints, body_prefix = model.endpoints(images, is_training=False)
-    with tf.name_scope('head'):
-        endpoints = head.head(endpoints, args.embedding_dim, is_training=False)
-
-    with h5py.File(args.filename, 'w') as f_out, tf.compat.v1.Session() as sess:
-        # Initialize the network/load the checkpoint.
-        if args.checkpoint is None:
-            checkpoint = tf.train.latest_checkpoint(args.experiment_root)
-        else:
-            checkpoint = os.path.join(args.experiment_root, args.checkpoint)
-        if not args.quiet:
-            print('Restoring from checkpoint: {}'.format(checkpoint))
-        saver = tf.compat.v1.train.Saver()
-        saver.restore(sess, checkpoint)
+    with h5py.File(args.filename, 'w') as f_out:        
 
         # Go ahead and embed the whole dataset, with all augmented versions too.
         emb_storage = np.zeros(
             (len(data_fids) * len(modifiers), args.embedding_dim), np.float32)
         for start_idx in count(step=args.batch_size):
-            try:
-                emb = sess.run(endpoints['emb'])
+            if(start_idx < len(emb_storage)):
+                emb = model(next(images_iterator)[0])['emb'].numpy()
                 print('\rEmbedded batch {}-{}/{}'.format(
                         start_idx, start_idx + len(emb), len(emb_storage)),
                     flush=True, end='')
+                
                 emb_storage[start_idx:start_idx + len(emb)] = emb
-            except tf.errors.OutOfRangeError:
+            else:
                 break  # This just indicates the end of the dataset.
-
         print()
         if not args.quiet:
             print("Done with embedding, aggregating augmentations...", flush=True)

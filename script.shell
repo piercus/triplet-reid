@@ -1,0 +1,58 @@
+NAME=horserider_202000804
+INITIAL_CKPT=/media/pierre/KlapStorage/equidia/reid-checkpoints/horserider_202000804/checkpoint-25000
+CHECKPOINT=checkpoint-25000
+SAVED_MODEL=exported
+CSV_VALIDATION=data/person-reid-validation.csv
+CSV_TRAIN=data/person-reid-train.csv
+BATCH_SIZE=64
+BATCH_P=9
+TRAIN_ITERATIONS=10
+FOLDER=/media/pierre/KlapStorage/equidia/reid-checkpoints/${NAME}
+IMAGE_ROOT=/media/pierre/KlapStorage/equidia/jersey-identification_tmp/
+
+pipenv run python train.py \
+		--batch_p=${BATCH_P} \
+    --train_set ${CSV_TRAIN} \
+    --image_root ${IMAGE_ROOT} \
+		--flip_augment \
+		--crop_augment \
+		--train_iterations ${TRAIN_ITERATIONS} \
+		--initial_checkpoint ${INITIAL_CKPT} \
+    --experiment_root ${FOLDER}
+
+pipenv run python embed.py \
+		--batch_size=${BATCH_SIZE} \
+		--checkpoint=${CHECKPOINT} \
+    --experiment_root ${FOLDER} \
+    --dataset ${CSV_VALIDATION} \
+    --filename ${NAME}_query_embeddings.h5 
+
+pipenv run ./evaluate.py \
+    --excluder diagonal \
+    --query_dataset ${CSV_VALIDATION} \
+    --query_embeddings ${FOLDER}/${NAME}_query_embeddings.h5 \
+    --gallery_dataset ${CSV_VALIDATION} \
+    --gallery_embeddings ${FOLDER}/${NAME}_query_embeddings.h5 \
+    --metric euclidean \
+    --filename ${FOLDER}/${NAME}_evaluation.json
+		
+pipenv run ./to-saved-model.py \
+		--checkpoint=${CHECKPOINT} \
+    --saved_model=${SAVED_MODEL} \
+    --experiment_root=${FOLDER}
+
+pipenv run ./embed-saved-model.py \
+		--batch_size=${BATCH_SIZE} \
+		--saved_model=${SAVED_MODEL} \
+    --experiment_root=${FOLDER} \
+    --dataset=${CSV_VALIDATION} \
+    --filename=${NAME}_query_saved_model_embeddings.h5
+
+pipenv run ./evaluate.py \
+    --excluder diagonal \
+    --query_dataset ${CSV_VALIDATION} \
+    --query_embeddings ${FOLDER}/${NAME}_query_saved_model_embeddings.h5 \
+    --gallery_dataset ${CSV_VALIDATION} \
+    --gallery_embeddings ${FOLDER}/${NAME}_query_saved_model_embeddings.h5 \
+    --metric euclidean \
+    --filename ${FOLDER}/${NAME}_evaluation.json

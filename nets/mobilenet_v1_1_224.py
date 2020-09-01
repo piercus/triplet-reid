@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 from nets.mobilenet_v1 import mobilenet_v1
-from tensorflow.contrib import slim
+import tf_slim as slim
 
 
 def endpoints(image, is_training):
@@ -10,11 +10,11 @@ def endpoints(image, is_training):
 
     image = tf.divide(image, 255.0)
 
-    with tf.contrib.slim.arg_scope(mobilenet_v1_arg_scope(batch_norm_decay=0.9, weight_decay=0.0)):
+    with slim.arg_scope(mobilenet_v1_arg_scope(batch_norm_decay=0.9, weight_decay=0.0)):
         _, endpoints = mobilenet_v1(image, num_classes=1001, is_training=is_training)
 
     endpoints['model_output'] = endpoints['global_pool'] = tf.reduce_mean(
-        endpoints['Conv2d_13_pointwise'], [1, 2], name='global_pool', keep_dims=False)
+        endpoints['Conv2d_13_pointwise'], [1, 2], name='global_pool', keepdims=False)
 
     return endpoints, 'MobilenetV1'
 
