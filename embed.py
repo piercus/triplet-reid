@@ -146,7 +146,7 @@ def main():
             print('{}: {}'.format(key, value))
 
     # Load the data from the CSV file.
-    _, data_fids = common.load_dataset(args.dataset, args.image_root)
+    _, data_fids, rids = common.load_dataset(args.dataset, args.image_root)
 
     net_input_size = (args.net_input_height, args.net_input_width)
     pre_crop_size = (args.pre_crop_height, args.pre_crop_width)

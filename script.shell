@@ -1,18 +1,22 @@
-NAME=horserider_202000804
+NAME=horserider_202000916-4
 INITIAL_CKPT=/media/pierre/KlapStorage/equidia/reid-checkpoints/horserider_202000804/checkpoint-25000
 CHECKPOINT=checkpoint-25000
 SAVED_MODEL=exported
-CSV_VALIDATION=data/person-reid-validation.csv
-CSV_TRAIN=data/person-reid-train.csv
+CSV_VALIDATION=/media/pierre/KlapStorage/equidia/reid-checkpoints/horserider_202000916-2/data/person-reid-validation-20200916.csv
+CSV_TRAIN=/media/pierre/KlapStorage/equidia/reid-checkpoints/horserider_202000916-2/data/person-reid-train-20200916.csv
 BATCH_SIZE=64
-BATCH_P=9
-TRAIN_ITERATIONS=10
+BATCH_P=20
+PRE_CROP_HEIGHT=288
+PRE_CROP_WIDTH=144
+TRAIN_ITERATIONS=25001
 FOLDER=/media/pierre/KlapStorage/equidia/reid-checkpoints/${NAME}
 IMAGE_ROOT=/media/pierre/KlapStorage/equidia/jersey-identification_tmp/
 
 pipenv run python train.py \
 		--batch_p=${BATCH_P} \
     --train_set ${CSV_TRAIN} \
+		--pre_crop_height ${PRE_CROP_HEIGHT} \
+		--pre_crop_width ${PRE_CROP_WIDTH} \
     --image_root ${IMAGE_ROOT} \
 		--flip_augment \
 		--crop_augment \
@@ -28,7 +32,7 @@ pipenv run python embed.py \
     --filename ${NAME}_query_embeddings.h5 
 
 pipenv run ./evaluate.py \
-    --excluder diagonal \
+    --excluder scene \
     --query_dataset ${CSV_VALIDATION} \
     --query_embeddings ${FOLDER}/${NAME}_query_embeddings.h5 \
     --gallery_dataset ${CSV_VALIDATION} \
