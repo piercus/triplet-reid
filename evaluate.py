@@ -19,7 +19,7 @@ import loss
 parser = ArgumentParser(description='Evaluate a ReID embedding.')
 
 parser.add_argument(
-    '--excluder', required=True, choices=('market1501', 'diagonal','duke'),
+    '--excluder', required=True, choices=('market1501', 'diagonal','duke', 'scene'),
     help='Excluder function to mask certain matches. Especially for multi-'
          'camera datasets, one often excludes pictures of the query person from'
          ' the gallery if it is taken from the same camera. The `diagonal`'
@@ -105,8 +105,8 @@ def main():
     args = parser.parse_args()
 
     # Load the query and gallery data from the CSV files.
-    query_pids, query_fids = common.load_dataset(args.query_dataset, None)
-    gallery_pids, gallery_fids = common.load_dataset(args.gallery_dataset, None)
+    query_pids, query_fids, rids = common.load_dataset(args.query_dataset, None)
+    gallery_pids, gallery_fids, rids = common.load_dataset(args.gallery_dataset, None)
 
     # Load the two datasets fully into memory.
     with h5py.File(args.query_embeddings, 'r') as f_query:

@@ -117,7 +117,7 @@ def load_dataset(csv_file, image_root, fail_on_missing=True):
         IOError if any one file is missing and `fail_on_missing` is True.
     """
     dataset = np.genfromtxt(csv_file, delimiter=',', dtype='|U')
-    pids, fids = dataset.T
+    pids, fids, rids = dataset.T
     
     # Possibly check if all files exist
     if image_root is not None:
@@ -137,8 +137,9 @@ def load_dataset(csv_file, image_root, fail_on_missing=True):
                 # We simply remove the missing files.
                 fids = fids[np.logical_not(missing)]
                 pids = pids[np.logical_not(missing)]
+                rids = rids[np.logical_not(missing)]
 
-    return pids, fids
+    return pids, fids, rids
 
 
 def fid_to_image(fid, pid, image_root, image_size):
