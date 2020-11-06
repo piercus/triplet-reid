@@ -100,6 +100,7 @@ def five_crops(image, crop_size):
 def main():
     # Verify that parameters are set correctly.
     args = parser.parse_args()
+    print(args)
 
     # Possibly auto-generate the output filename.
     if args.filename is None:

@@ -1,5 +1,5 @@
 class Excluder(object):
-    def __init__(self, gallery_fids):
+    def __init__(self, gallery_fids, gallery_rids):
         # Store the gallery data
         self.gallery_fids = gallery_fids
 

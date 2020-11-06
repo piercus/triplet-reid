@@ -9,7 +9,7 @@ class Excluder:
     In the Market1501 evaluation, we need to exclude both the same PID in
     the same camera (CID), as well as "junk" images (PID=-1).
     """
-    def __init__(self, gallery_fids):
+    def __init__(self, gallery_fids, gallery_rids):
         # Setup a regexp for extracing the PID and camera (CID) form a FID.
         self.regexp = re.compile('(\S+)_c(\d+)s(\d+)_.*')
 

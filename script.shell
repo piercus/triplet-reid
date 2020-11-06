@@ -1,18 +1,17 @@
-NAME=players_20200210_25000_iter_augm_group
-INITIAL_CKPT=./tmp/reid-checkpoints/players_20200210_25000_iter/checkpoint-21000
+NAME=players_20200210_25000_iter_augm
+INITIAL_CKPT=/media/samuel/DD/triplet-reid/reid-checkpoints/players_20200210_25000_iter/checkpoint-21000
 CHECKPOINT=checkpoint-24999
 SAVED_MODEL=exported
-CSV_VALIDATION_QUERY=./tmp/object-reidentification-20200210-validation-query.csv
-CSV_VALIDATION_GALLERY=./tmp/object-reidentification-20200210-validation-gallery.csv
-CSV_TRAIN_QUERY=./tmp/object-reidentification-20200210-train-query.csv
-CSV_TRAIN_GALLERY=./tmp/object-reidentification-20200210-train-gallery.csv
-CSV_TRAIN=./tmp/object-reidentification-20200210-train.csv
+CSV_VALIDATION_QUERY=/media/samuel/DD/triplet-reid/data/object-reidentification-20200210-validation-query.csv
+CSV_VALIDATION_GALLERY=/media/samuel/DD/triplet-reid/data/object-reidentification-20200210-validation-gallery.csv
+CSV_TRAIN_QUERY=/media/samuel/DD/triplet-reid/data/object-reidentification-20200210-train-query.csv
+CSV_TRAIN_GALLERY=/media/samuel/DD/triplet-reid/data/object-reidentification-20200210-train-gallery.csv
+CSV_TRAIN=/media/samuel/DD/triplet-reid/data/object-reidentification-20200210-train.csv
 BATCH_SIZE=64
 BATCH_P=9
-# TRAIN_ITERATIONS=7036
 TRAIN_ITERATIONS=25000
-FOLDER=./tmp/reid-checkpoints/${NAME}
-IMAGE_ROOT=/home/samuel/Téléchargements/identification_data_20200210/media/pierre/KlapStorage2/urbansoccer/identification/20200210-frames/
+FOLDER=/media/samuel/DD/triplet-reid/reid-checkpoints/${NAME}
+IMAGE_ROOT=/media/samuel/DD/identification_data_20200210/media/pierre/KlapStorage2/urbansoccer/identification/20200210-frames/
 
 pipenv run python train.py \
 		--batch_p=${BATCH_P} \
@@ -62,7 +61,7 @@ pipenv run python embed.py \
     --filename ${NAME}_train_gallery_embeddings.h5
 
 pipenv run ./evaluate.py \
-    --excluder diagonal \
+    --excluder scene \
     --query_dataset ${CSV_VALIDATION_QUERY} \
     --query_embeddings ${FOLDER}/${NAME}_validation_query_embeddings.h5 \
     --gallery_dataset ${CSV_VALIDATION_GALLERY} \
@@ -71,7 +70,7 @@ pipenv run ./evaluate.py \
     --filename ${FOLDER}/${NAME}_evaluation.json
 
 pipenv run ./evaluate.py \
-    --excluder diagonal \
+    --excluder scene \
     --query_dataset ${CSV_TRAIN_QUERY} \
     --query_embeddings ${FOLDER}/${NAME}_train_query_embeddings.h5 \
     --gallery_dataset ${CSV_TRAIN_GALLERY} \
