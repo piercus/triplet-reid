@@ -15,7 +15,7 @@ class Excluder:
         # Parse the gallery_set
         self.gallery_pids, self.gallery_cids = self._parse(gallery_fids)
 
-    def __call__(self, query_fids):
+    def __call__(self, query_fids, query_rids):
         # Extract both the PIDs and CIDs from the query filenames:
         query_pids, query_cids = self._parse(query_fids)
 

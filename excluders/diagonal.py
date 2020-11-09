@@ -3,6 +3,6 @@ class Excluder(object):
         # Store the gallery data
         self.gallery_fids = gallery_fids
 
-    def __call__(self, query_fids):
+    def __call__(self, query_fids, query_rids):
         # Only make sure we don't match the exact same image.
         return self.gallery_fids[None] == query_fids[..., None]
