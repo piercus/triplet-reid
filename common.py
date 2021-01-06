@@ -3,7 +3,7 @@
 from argparse import ArgumentTypeError
 import logging
 import os
-
+import uuid
 import numpy as np
 import tensorflow as tf
 
@@ -139,7 +139,7 @@ def load_dataset(csv_file, image_root, fail_on_missing=True):
                 pids = pids[np.logical_not(missing)]
                 rids = rids[np.logical_not(missing)]
 
-    return pids, fids, rids
+    return pids, fids, rids, None
 
 def load_objdetect_dataset(csv_file, image_root, fail_on_missing=True):
     """ Loads a dataset .csv file, returning PIDs and FIDs.
@@ -186,9 +186,15 @@ def load_objdetect_dataset(csv_file, image_root, fail_on_missing=True):
                 pids = pids[np.logical_not(missing)]
                 rids = rids[np.logical_not(missing)]
 
-    return pids, fids, rids, x1s, y1s, x2s, y2s
-
-def fid_to_image(fid, pid, image_root, image_size):
+    return pids, fids, rids, np.transpose([x1s, y1s, x2s, y2s])
+def save_preprocessimage(im, fid, pid, folder):
+  hexdig = uuid.uuid4().hex
+  (filename, extension) = os.path.splitext(os.path.basename(fid))
+  debug_filepath = folder+'/'+filename+'-'+hexdig+'.'+extension
+  tf.keras.preprocessing.image.save_img(debug_filepath, im)
+  return (im, fid, pid)
+  
+def fid_to_image(fid, pid, box, image_root, image_size):
     """ Loads and resizes an image given by FID. Pass-through the PID. """
     # Since there is no symbolic path.join, we just add a '/' to be sure.
     string = tf.strings.reduce_join([image_root, '/', fid])
@@ -200,6 +206,10 @@ def fid_to_image(fid, pid, image_root, image_size):
     # Sounds ridiculous, but is true:
     # https://github.com/tensorflow/tensorflow/issues/9356#issuecomment-309144064
     image_decoded = tf.image.decode_jpeg(image_encoded, channels=3)
+    
+    if(box is not None):
+      image_decoded = tf.image.crop_to_bounding_box(image, box[0], box[1], box[2]-box[0], box[3]-box[1])
+    
     image_resized = tf.image.resize(image_decoded, image_size)
 
     return image_resized, fid, pid
