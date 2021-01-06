@@ -66,6 +66,10 @@ parser.add_argument(
     '--initial_checkpoint', default=None,
     help='Path to the checkpoint file of the pretrained network.')
 
+parser.add_argument(
+    '--grouping', action='store_true', default=False,
+    help='When this flag is provided, training is done group by group.')
+
 # TODO move these defaults to the .sh script?
 parser.add_argument(
     '--batch_p', default=32, type=common.positive_int,
@@ -165,12 +169,12 @@ def sample_k_fids_for_pid(pid, all_fids, all_pids, batch_k):
     selected_fids = tf.gather(possible_fids, shuffled[:batch_k])
 
     return selected_fids, tf.fill([batch_k], pid)
-    
+
 def sample_p_pids_for_rid(rid, all_pids, all_rids, batch_p):
     """ Given a RID, select P PIDs of that specific RID. """
-    
+
     possible_pids = tf.boolean_mask(tensor=all_pids, mask=tf.equal(all_rids, rid))
-    
+
     possible_uniq_pids, _ = tf.unique(possible_pids)
 
     # The following simply uses a subset of K of the possible FIDs
@@ -179,20 +183,20 @@ def sample_p_pids_for_rid(rid, all_pids, all_rids, batch_p):
     # original FID count such that all of them will be sampled equally likely.
     # print_op = tf.print("tensors:", possible_uniq_pids, possible_pids)
     count = tf.shape(input=possible_uniq_pids)[0]
-    
 
-    
+
+
     padded_count = tf.cast(tf.math.ceil(batch_p / tf.cast(count, tf.float32)), tf.int32) * count
     full_range = tf.math.floormod(tf.range(padded_count), count)
 
     # Sampling is always performed by shuffling and taking the first k.
     shuffled = tf.random.shuffle(full_range)
     selected_pids = tf.gather(possible_uniq_pids, shuffled[:batch_p])
-    
+
     # print_op = tf.print("selected_pids:", selected_pids, batch_p, count, padded_count)
     # with tf.control_dependencies([print_op]):
     races = tf.fill([batch_p], rid)
-    
+
     return selected_pids, races
 
 def main():
@@ -273,20 +277,30 @@ def main():
     
     # Setup a tf.Dataset where one "epoch" loops over all PIDS.
     # PIDS are shuffled after every epoch and continue indefinitely.
-    unique_rids = np.unique(rids)
-    dataset = tf.data.Dataset.from_tensor_slices(unique_rids)
-    dataset = dataset.shuffle(len(unique_rids))
-    dataset = dataset.take(len(unique_rids))
-    dataset = dataset.repeat(None)  # Repeat forever. Funny way of stating it.
+    if args.grouping:
+        unique_rids = np.unique(rids)
+        dataset = tf.data.Dataset.from_tensor_slices(unique_rids)
+        dataset = dataset.shuffle(len(unique_rids))
+        dataset = dataset.take(len(unique_rids))
+        dataset = dataset.repeat(None)  # Repeat forever. Funny way of stating it.
 
-    dataset = dataset.map(lambda rid: sample_p_pids_for_rid(
-        rid, all_pids=pids, all_rids=rids, batch_p=args.batch_p))
-    
-    dataset = dataset.apply(tf.data.experimental.unbatch())
+        dataset = dataset.map(lambda rid: sample_p_pids_for_rid(
+            rid, all_pids=pids, all_rids=rids, batch_p=args.batch_p))
+        dataset = dataset.apply(tf.data.experimental.unbatch())
+        # For every PID, get K images.
+        dataset = dataset.map(lambda pid, rid: sample_k_fids_for_pid(
+            pid, all_fids=fids, all_pids=pids, batch_k=args.batch_k))
 
-    # For every PID, get K images.
-    dataset = dataset.map(lambda pid, rid: sample_k_fids_for_pid(
-        pid, all_fids=fids, all_pids=pids, batch_k=args.batch_k))
+    else:
+        unique_pids = np.unique(pids)
+        dataset = tf.data.Dataset.from_tensor_slices(unique_pids)
+        dataset = dataset.shuffle(len(unique_pids))
+        dataset = dataset.take((len(unique_pids) // args.batch_p) * args.batch_p)
+        dataset = dataset.repeat(None)
+
+        # For every PID, get K images.
+        dataset = dataset.map(lambda pid: sample_k_fids_for_pid(
+            pid, all_fids=fids, all_pids=pids, batch_k=args.batch_k))
 
     # Ungroup/flatten the batches for easy loading of the files.
     dataset = dataset.apply(tf.data.experimental.unbatch())
@@ -460,7 +474,7 @@ def main():
                 # Save a checkpoint of training every so often.
                 if (args.checkpoint_frequency > 0 and
                         step % args.checkpoint_frequency == 0):
-                    
+
                     checkpoint_saver.save(sess, os.path.join(
                         args.experiment_root, 'checkpoint'), global_step=step)
 
@@ -474,7 +488,7 @@ def main():
         # when the process was interrupted.
         checkpoint_saver.save(sess, os.path.join(
             args.experiment_root, 'checkpoint'), global_step=step)
-        
+
 
 if __name__ == '__main__':
     main()
