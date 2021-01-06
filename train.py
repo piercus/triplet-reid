@@ -35,6 +35,10 @@ parser.add_argument(
     help='Path to the train_set csv file.')
 
 parser.add_argument(
+    '--csv_format', default='tripletreid',
+    help='type of csv, can be \'tripletreid\' (person1,/path/to/file1.png,group1) or \'objdetection\' (path/to/image.jpg,x1,y1,x2,y2,class_name,groupname)')
+
+parser.add_argument(
     '--image_root', type=common.readable_directory,
     help='Path that will be pre-pended to the filenames in the train_set csv.')
 
@@ -256,11 +260,17 @@ def main():
         parser.print_help()
         log.error("You did not specify the required `image_root` argument!")
         sys.exit(1)
-
-    # Load the data from the CSV file.
-    pids, fids, rids = common.load_dataset(args.train_set, args.image_root)
-    max_fid_len = max(map(len, fids))  # We'll need this later for logfiles.
-
+    
+    if(args.csv_format == 'tripletreid'):
+    
+      # Load the data from the CSV file.
+      pids, fids, rids = common.load_dataset(args.train_set, args.image_root)
+      max_fid_len = max(map(len, fids))  # We'll need this later for logfiles.
+    elif(args.csv_format == 'objectdetection'):
+      pids, fids, rids,x1s,y1s,x2s,y2s = common.load_dataset(args.train_set, args.image_root)
+      max_fid_len = max(map(len, fids))  # We'll need this later for logfiles.
+    
+    
     # Setup a tf.Dataset where one "epoch" loops over all PIDS.
     # PIDS are shuffled after every epoch and continue indefinitely.
     unique_rids = np.unique(rids)
