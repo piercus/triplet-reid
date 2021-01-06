@@ -105,8 +105,8 @@ def main():
     args = parser.parse_args()
 
     # Load the query and gallery data from the CSV files.
-    query_pids, query_fids, rids = common.load_dataset(args.query_dataset, None)
-    gallery_pids, gallery_fids, rids = common.load_dataset(args.gallery_dataset, None)
+    query_pids, query_fids, query_rids = common.load_dataset(args.query_dataset, None)
+    gallery_pids, gallery_fids, gallery_rids = common.load_dataset(args.gallery_dataset, None)
 
     # Load the two datasets fully into memory.
     with h5py.File(args.query_embeddings, 'r') as f_query:
@@ -122,11 +122,11 @@ def main():
                          'dimension'.format(query_dim, gallery_dim))
 
     # Setup the dataset specific matching function
-    excluder = import_module('excluders.' + args.excluder).Excluder(gallery_fids)
+    excluder = import_module('excluders.' + args.excluder).Excluder(gallery_fids, gallery_rids)
 
     # We go through the queries in batches, but we always need the whole gallery
-    batch_pids, batch_fids, batch_embs = tf.data.Dataset.from_tensor_slices(
-        (query_pids, query_fids, query_embs)
+    batch_pids, batch_fids, batch_rids, batch_embs = tf.data.Dataset.from_tensor_slices(
+        (query_pids, query_fids, query_rids, query_embs)
     ).batch(args.batch_size).make_one_shot_iterator().get_next()
 
     batch_distances = loss.cdist(batch_embs, gallery_embs, metric=args.metric)
@@ -144,8 +144,8 @@ def main():
         for start_idx in count(step=args.batch_size):
             try:
                 # Compute distance to all gallery embeddings
-                distances, pids, fids = sess.run([
-                    batch_distances, batch_pids, batch_fids])
+                distances, pids, fids, rids = sess.run([
+                    batch_distances, batch_pids, batch_fids, batch_rids])
                 print('\rEvaluating batch {}-{}/{}'.format(
                         start_idx, start_idx + len(fids), len(query_fids)),
                       flush=True, end='')
@@ -154,7 +154,7 @@ def main():
                 break
 
             # Convert the array of objects back to array of strings
-            pids, fids = np.array(pids, '|U'), np.array(fids, '|U')
+            pids, fids, rids = np.array(pids, '|U'), np.array(fids, '|U'), np.array(rids, '|U')
 
             # Compute the pid matches
             pid_matches = gallery_pids[None] == pids[:,None]
@@ -162,7 +162,7 @@ def main():
             # Get a mask indicating True for those gallery entries that should
             # be ignored for whatever reason (same camera, junk, ...) and
             # exclude those in a way that doesn't affect CMC and mAP.
-            mask = excluder(fids)
+            mask = excluder(fids, rids)
             distances[mask] = np.inf
             pid_matches[mask] = False
 
@@ -194,7 +194,7 @@ def main():
     # Save important data
     if args.filename is not None:
         json.dump({'mAP': mean_ap, 'CMC': list(cmc), 'aps': list(aps)}, args.filename)
-    
+
     print(len(cmc))
     # Print out a short summary.
     print('mAP: {:.2%} | top-1: {:.2%} top-2: {:.2%} | top-5: {:.2%} | top-10: {:.2%} | top-20: {:.2%} | top-50: {:.2%}'.format(

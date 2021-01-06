@@ -8,14 +8,14 @@ class Excluder:
     """
     In the DukeMTMC-reID evaluation, we need to exclude distractions
     """
-    def __init__(self, gallery_fids):
+    def __init__(self, gallery_fids, gallery_rids):
         # Setup a regexp for extracing the PID and camera (CID) form a FID.
         self.regexp = re.compile('(\S+)_c(\d+)_.*')
 
         # Parse the gallery_set
         self.gallery_pids, self.gallery_cids = self._parse(gallery_fids)
 
-    def __call__(self, query_fids):
+    def __call__(self, query_fids, query_rids):
         # Extract both the PIDs and CIDs from the query filenames:
         query_pids, query_cids = self._parse(query_fids)
 
