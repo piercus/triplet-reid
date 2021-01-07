@@ -60,6 +60,10 @@ parser.add_argument(
          'default scikit-learn implementation that gives slightly different'
          'scores.')
 
+parser.add_argument(
+    '--csv_format', default='tripletreid',
+    help='type of csv, can be \'tripletreid\' (person1,/path/to/file1.png,group1) or \'objdetection\' (path/to/image.jpg,x1,y1,x2,y2,class_name,groupname)')
+
 
 def average_precision_score_market(y_true, y_score):
     """ Compute average precision (AP) from prediction scores.
@@ -104,9 +108,17 @@ def main():
     # Verify that parameters are set correctly.
     args = parser.parse_args()
 
-    # Load the query and gallery data from the CSV files.
-    query_pids, query_fids, query_rids = common.load_dataset(args.query_dataset, None)
-    gallery_pids, gallery_fids, gallery_rids = common.load_dataset(args.gallery_dataset, None)
+    # # Load the query and gallery data from the CSV files.
+    # query_pids, query_fids, query_rids = common.load_dataset(args.query_dataset, None)
+    # gallery_pids, gallery_fids, gallery_rids = common.load_dataset(args.gallery_dataset, None)
+
+    # Load the query and gallery data from the CSV file.
+    if(args.csv_format == 'tripletreid'):
+      query_pids, query_fids, query_rids, _ = common.load_dataset(args.query_dataset, None)
+      gallery_pids, gallery_fids, gallery_rids, _ = common.load_dataset(args.gallery_dataset, None)
+    elif(args.csv_format == 'objectdetection'):
+      query_pids, query_fids, query_rids, _ = common.load_objdetect_dataset(args.query_dataset, None)
+      gallery_pids, gallery_fids, gallery_rids, _ = common.load_objdetect_dataset(args.gallery_dataset, None)
 
     # Load the two datasets fully into memory.
     with h5py.File(args.query_embeddings, 'r') as f_query:

@@ -37,6 +37,7 @@ parser.add_argument(
 parser.add_argument(
     '--csv_format', default='tripletreid',
     help='type of csv, can be \'tripletreid\' (person1,/path/to/file1.png,group1) or \'objdetection\' (path/to/image.jpg,x1,y1,x2,y2,class_name,groupname)')
+
 parser.add_argument(
     '--debug_folder',
     help='Saved the pre-processed input into a specific folder')
@@ -162,7 +163,7 @@ def sample_k_fids_for_pid(pid, all_fids, all_pids, all_boxes, batch_k):
       possible_boxes = tf.boolean_mask(tensor=all_boxes, mask=tf.equal(all_pids, pid))
     else:
       possible_boxes = tf.boolean_mask(tensor=tf.fill([len(all_pids)], None), mask=tf.equal(all_pids, pid))
-    
+
     # The following simply uses a subset of K of the possible FIDs
     # if more than, or exactly K are available. Otherwise, we first
     # create a padded list of indices which contain a multiple of the
@@ -272,7 +273,7 @@ def main():
         parser.print_help()
         log.error("You did not specify the required `image_root` argument!")
         sys.exit(1)
-        
+
     # Load the data from the CSV file.
     if(args.csv_format == 'tripletreid'):
       pids, fids, rids, boxes = common.load_dataset(args.train_set, args.image_root)
@@ -280,8 +281,7 @@ def main():
     elif(args.csv_format == 'objectdetection'):
       pids, fids, rids, boxes = common.load_objdetect_dataset(args.train_set, args.image_root)
       max_fid_len = max(map(len, fids))  # We'll need this later for logfiles.
-    
-    
+
     # Setup a tf.Dataset where one "epoch" loops over all PIDS.
     # PIDS are shuffled after every epoch and continue indefinitely.
     if args.grouping:
@@ -330,10 +330,10 @@ def main():
     if args.crop_augment:
         dataset = dataset.map(
             lambda im, fid, pid: (tf.image.random_crop(im, net_input_size + (3,)), fid, pid))
-    
-    if args.debug_folder
+
+    if args.debug_folder:
         dataset = dataset.map(
-            lambda im, fid, pid: common.save_preprocessimage(im, fid, pid)
+            lambda im, fid, pid: common.save_preprocessimage(im, fid, pid, args.debug_folder)
         )
     # Group it back into PK batches.
     batch_size = args.batch_p * args.batch_k
