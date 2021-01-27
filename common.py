@@ -3,7 +3,7 @@
 from argparse import ArgumentTypeError
 import logging
 import os
-
+import uuid
 import numpy as np
 import tensorflow as tf
 
@@ -117,8 +117,8 @@ def load_dataset(csv_file, image_root, fail_on_missing=True):
         IOError if any one file is missing and `fail_on_missing` is True.
     """
     dataset = np.genfromtxt(csv_file, delimiter=',', dtype='|U')
-    pids, fids = dataset.T
-    
+    pids, fids, rids = dataset.T
+
     # Possibly check if all files exist
     if image_root is not None:
         missing = np.full(len(fids), False, dtype=bool)
@@ -137,23 +137,104 @@ def load_dataset(csv_file, image_root, fail_on_missing=True):
                 # We simply remove the missing files.
                 fids = fids[np.logical_not(missing)]
                 pids = pids[np.logical_not(missing)]
+                rids = rids[np.logical_not(missing)]
 
-    return pids, fids
+    return pids, fids, rids, None
 
+def load_objdetect_dataset(csv_file, image_root, fail_on_missing=True):
+    """ Loads a dataset .csv file, returning PIDs and FIDs.
 
-def fid_to_image(fid, pid, image_root, image_size):
+    PIDs are the "person IDs", i.e. class names/labels.
+    FIDs are the "file IDs", which are individual relative filenames.
+
+    Args:
+        csv_file (string, file-like object): The csv data file to load.
+        image_root (string): The path to which the image files as stored in the
+            csv file are relative to. Used for verification purposes.
+            If this is `None`, no verification at all is made.
+        fail_on_missing (bool or None): If one or more files from the dataset
+            are not present in the `image_root`, either raise an IOError (if
+            True) or remove it from the returned dataset (if False).
+
+    Returns:
+        (pids, fids) a tuple of numpy string arrays corresponding to the PIDs,
+        i.e. the identities/classes/labels and the FIDs, i.e. the filenames.
+
+    Raises:
+        IOError if any one file is missing and `fail_on_missing` is True.
+    """
+    dataset = np.genfromtxt(csv_file, delimiter=',', dtype='|U')
+    fids, x1s, y1s, x2s, y2s, pids, rids = dataset.T
+
+    # Possibly check if all files exist
+    if image_root is not None:
+        missing = np.full(len(fids), False, dtype=bool)
+        for i, fid in enumerate(fids):
+            missing[i] = not os.path.isfile(os.path.join(image_root, fid))
+
+        missing_count = np.sum(missing)
+        if missing_count > 0:
+            if fail_on_missing:
+                raise IOError('Using the `{}` file and `{}` as an image root {}/'
+                            '{} images are missing'.format(
+                                csv_file, image_root, missing_count, len(fids)))
+            else:
+                print('[Warning] removing {} missing file(s) from the'
+                    ' dataset.'.format(missing_count))
+                # We simply remove the missing files.
+                fids = fids[np.logical_not(missing)]
+                pids = pids[np.logical_not(missing)]
+                rids = rids[np.logical_not(missing)]
+
+    x1s = x1s.astype(np.int32)
+    y1s = y1s.astype(np.int32)
+    x2s = x2s.astype(np.int32)
+    y2s = y2s.astype(np.int32)
+    return pids, fids, rids, np.transpose([x1s, y1s, x2s, y2s])
+
+def save_preprocessimage(im, fid, pid, folder):
+
+  def py_save_preprocessimage(im, fid, pid):
+      hexdig = uuid.uuid4().hex
+      (filename, extension) = os.path.splitext(os.path.basename(fid))
+      filename = filename.decode("utf-8")
+      extension = extension.decode("utf-8")
+      debug_filepath = folder+'/'+filename+'-'+hexdig+extension
+      tf.keras.preprocessing.image.save_img(debug_filepath, im)
+      return (im, fid, pid)
+
+  result = tf.compat.v1.py_func(py_save_preprocessimage, [im, fid, pid], [tf.float32, tf.string, tf.string])
+  result[0].set_shape(im.get_shape())
+  result[1].set_shape(fid.get_shape())
+  result[2].set_shape(pid.get_shape())
+  return result
+
+def fid_to_image(fid, pid, box, image_root, image_size):
     """ Loads and resizes an image given by FID. Pass-through the PID. """
     # Since there is no symbolic path.join, we just add a '/' to be sure.
     string = tf.strings.reduce_join([image_root, '/', fid])
     image_encoded = tf.io.read_file(string)
 
-    # tf.image.decode_image doesn't set the shape, not even the dimensionality,
+    # tf.image.decode_image doesn't set the shape, not even the dimensionality
     # because it potentially loads animated .gif files. Instead, we use either
     # decode_jpeg or decode_png, each of which can decode both.
     # Sounds ridiculous, but is true:
     # https://github.com/tensorflow/tensorflow/issues/9356#issuecomment-309144064
     image_decoded = tf.image.decode_jpeg(image_encoded, channels=3)
-    image_resized = tf.image.resize(image_decoded, image_size)
+
+    if(box is not None):
+        [image_height, image_width, channel] = [720, 1280, 3] # to be implemented
+        image_decoded.set_shape([image_height, image_width, channel])
+        tf_boxes = [[box[1]/(image_height - 1), box[0]/(image_width - 1), box[3]/(image_height - 1), box[2]/(image_width - 1)]]
+        expanded_image = tf.expand_dims(image_decoded, axis=0)
+        croped_image = tf.image.crop_and_resize(expanded_image, tf_boxes, [0], image_size)
+        image_resized = tf.squeeze(croped_image)
+        image_resized.set_shape(image_size + (3,))
+
+        # image_decoded = tf.image.crop_to_bounding_box(image_decoded, box[0], box[1], box[2]-box[0], box[3]-box[1])
+
+    else:
+        image_resized = tf.image.resize(image_decoded, image_size)
 
     return image_resized, fid, pid
 

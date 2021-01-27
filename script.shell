@@ -1,14 +1,17 @@
-NAME=horserider_202000804
-INITIAL_CKPT=/media/pierre/KlapStorage/equidia/reid-checkpoints/horserider_202000804/checkpoint-25000
-CHECKPOINT=checkpoint-25000
+NAME=players_20200210_25000_iter_group_augm_2
+INITIAL_CKPT=/media/samuel/DD/triplet-reid-2/reid-checkpoints/players_20200210_25000_iter-2/checkpoint-21000
+CHECKPOINT=checkpoint-24999
 SAVED_MODEL=exported
-CSV_VALIDATION=data/person-reid-validation.csv
-CSV_TRAIN=data/person-reid-train.csv
+CSV_VALIDATION_QUERY=/media/samuel/DD/triplet-reid-2/data/object-reidentification-20200210-validation-query-2.csv
+CSV_VALIDATION_GALLERY=/media/samuel/DD/triplet-reid-2/data/object-reidentification-20200210-validation-gallery-2.csv
+CSV_TRAIN_QUERY=/media/samuel/DD/triplet-reid-2/data/object-reidentification-20200210-train-query-2.csv
+CSV_TRAIN_GALLERY=/media/samuel/DD/triplet-reid-2/data/object-reidentification-20200210-train-gallery-2.csv
+CSV_TRAIN=/media/samuel/DD/triplet-reid-2/data/object-reidentification-20200210-train-2.csv
 BATCH_SIZE=64
 BATCH_P=9
-TRAIN_ITERATIONS=10
-FOLDER=/media/pierre/KlapStorage/equidia/reid-checkpoints/${NAME}
-IMAGE_ROOT=/media/pierre/KlapStorage/equidia/jersey-identification_tmp/
+TRAIN_ITERATIONS=25000
+FOLDER=/media/samuel/DD/triplet-reid-2/reid-checkpoints/${NAME}
+IMAGE_ROOT=/media/samuel/DD/identification_data_20200210/media/pierre/KlapStorage2/urbansoccer/identification/20200210-frames/
 
 pipenv run python train.py \
 		--batch_p=${BATCH_P} \
@@ -20,22 +23,59 @@ pipenv run python train.py \
 		--initial_checkpoint ${INITIAL_CKPT} \
     --experiment_root ${FOLDER}
 
+pipenv run python train.py \
+		--batch_p=${BATCH_P} \
+    --train_set ${CSV_TRAIN} \
+    --image_root ${IMAGE_ROOT} \
+		--train_iterations ${TRAIN_ITERATIONS} \
+    --experiment_root ${FOLDER}
+
 pipenv run python embed.py \
 		--batch_size=${BATCH_SIZE} \
 		--checkpoint=${CHECKPOINT} \
     --experiment_root ${FOLDER} \
-    --dataset ${CSV_VALIDATION} \
-    --filename ${NAME}_query_embeddings.h5 
+    --dataset ${CSV_VALIDATION_QUERY} \
+    --filename ${NAME}_validation_query_embeddings.h5
+
+pipenv run python embed.py \
+		--batch_size=${BATCH_SIZE} \
+		--checkpoint=${CHECKPOINT} \
+    --experiment_root ${FOLDER} \
+    --dataset ${CSV_VALIDATION_GALLERY} \
+    --filename ${NAME}_validation_gallery_embeddings.h5
+
+pipenv run python embed.py \
+		--batch_size=${BATCH_SIZE} \
+		--checkpoint=${CHECKPOINT} \
+    --experiment_root ${FOLDER} \
+    --dataset ${CSV_TRAIN_QUERY} \
+    --filename ${NAME}_train_query_embeddings.h5
+
+pipenv run python embed.py \
+		--batch_size=${BATCH_SIZE} \
+		--checkpoint=${CHECKPOINT} \
+    --experiment_root ${FOLDER} \
+    --dataset ${CSV_TRAIN_GALLERY} \
+    --filename ${NAME}_train_gallery_embeddings.h5
 
 pipenv run ./evaluate.py \
-    --excluder diagonal \
-    --query_dataset ${CSV_VALIDATION} \
-    --query_embeddings ${FOLDER}/${NAME}_query_embeddings.h5 \
-    --gallery_dataset ${CSV_VALIDATION} \
-    --gallery_embeddings ${FOLDER}/${NAME}_query_embeddings.h5 \
+    --excluder scene \
+    --query_dataset ${CSV_VALIDATION_QUERY} \
+    --query_embeddings ${FOLDER}/${NAME}_validation_query_embeddings.h5 \
+    --gallery_dataset ${CSV_VALIDATION_GALLERY} \
+    --gallery_embeddings ${FOLDER}/${NAME}_validation_gallery_embeddings.h5 \
     --metric euclidean \
     --filename ${FOLDER}/${NAME}_evaluation.json
-		
+
+pipenv run ./evaluate.py \
+    --excluder scene \
+    --query_dataset ${CSV_TRAIN_QUERY} \
+    --query_embeddings ${FOLDER}/${NAME}_train_query_embeddings.h5 \
+    --gallery_dataset ${CSV_TRAIN_GALLERY} \
+    --gallery_embeddings ${FOLDER}/${NAME}_train_gallery_embeddings.h5 \
+    --metric euclidean \
+    --filename ${FOLDER}/${NAME}_evaluation_train.json
+
 pipenv run ./to-saved-model.py \
 		--checkpoint=${CHECKPOINT} \
     --saved_model=${SAVED_MODEL} \

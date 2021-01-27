@@ -35,6 +35,14 @@ parser.add_argument(
     help='Path to the train_set csv file.')
 
 parser.add_argument(
+    '--csv_format', default='tripletreid',
+    help='type of csv, can be \'tripletreid\' (person1,/path/to/file1.png,group1) or \'objdetection\' (path/to/image.jpg,x1,y1,x2,y2,class_name,groupname)')
+
+parser.add_argument(
+    '--debug_folder',
+    help='Saved the pre-processed input into a specific folder')
+
+parser.add_argument(
     '--image_root', type=common.readable_directory,
     help='Path that will be pre-pended to the filenames in the train_set csv.')
 
@@ -61,6 +69,10 @@ parser.add_argument(
 parser.add_argument(
     '--initial_checkpoint', default=None,
     help='Path to the checkpoint file of the pretrained network.')
+
+parser.add_argument(
+    '--grouping', action='store_true', default=False,
+    help='When this flag is provided, training is done group by group.')
 
 # TODO move these defaults to the .sh script?
 parser.add_argument(
@@ -144,9 +156,13 @@ parser.add_argument(
          ' Everything can be re-constructed and analyzed that way.')
 
 
-def sample_k_fids_for_pid(pid, all_fids, all_pids, batch_k):
+def sample_k_fids_for_pid(pid, all_fids, all_pids, all_boxes, batch_k):
     """ Given a PID, select K FIDs of that specific PID. """
     possible_fids = tf.boolean_mask(tensor=all_fids, mask=tf.equal(all_pids, pid))
+    if(all_boxes is not None):
+      possible_boxes = tf.boolean_mask(tensor=all_boxes, mask=tf.equal(all_pids, pid))
+    else:
+      possible_boxes = tf.boolean_mask(tensor=tf.fill([len(all_pids)], None), mask=tf.equal(all_pids, pid))
 
     # The following simply uses a subset of K of the possible FIDs
     # if more than, or exactly K are available. Otherwise, we first
@@ -159,9 +175,38 @@ def sample_k_fids_for_pid(pid, all_fids, all_pids, batch_k):
     # Sampling is always performed by shuffling and taking the first k.
     shuffled = tf.random.shuffle(full_range)
     selected_fids = tf.gather(possible_fids, shuffled[:batch_k])
+    selected_boxes = tf.gather(possible_boxes, shuffled[:batch_k])
 
-    return selected_fids, tf.fill([batch_k], pid)
+    return selected_fids, tf.fill([batch_k], pid), selected_boxes
 
+def sample_p_pids_for_rid(rid, all_pids, all_rids, batch_p):
+    """ Given a RID, select P PIDs of that specific RID. """
+
+    possible_pids = tf.boolean_mask(tensor=all_pids, mask=tf.equal(all_rids, rid))
+
+    possible_uniq_pids, _ = tf.unique(possible_pids)
+
+    # The following simply uses a subset of K of the possible FIDs
+    # if more than, or exactly K are available. Otherwise, we first
+    # create a padded list of indices which contain a multiple of the
+    # original FID count such that all of them will be sampled equally likely.
+    # print_op = tf.print("tensors:", possible_uniq_pids, possible_pids)
+    count = tf.shape(input=possible_uniq_pids)[0]
+
+
+
+    padded_count = tf.cast(tf.math.ceil(batch_p / tf.cast(count, tf.float32)), tf.int32) * count
+    full_range = tf.math.floormod(tf.range(padded_count), count)
+
+    # Sampling is always performed by shuffling and taking the first k.
+    shuffled = tf.random.shuffle(full_range)
+    selected_pids = tf.gather(possible_uniq_pids, shuffled[:batch_p])
+
+    # print_op = tf.print("selected_pids:", selected_pids, batch_p, count, padded_count)
+    # with tf.control_dependencies([print_op]):
+    races = tf.fill([batch_p], rid)
+
+    return selected_pids, races
 
 def main():
     args = parser.parse_args()
@@ -230,23 +275,39 @@ def main():
         sys.exit(1)
 
     # Load the data from the CSV file.
-    pids, fids = common.load_dataset(args.train_set, args.image_root)
-    max_fid_len = max(map(len, fids))  # We'll need this later for logfiles.
+    if(args.csv_format == 'tripletreid'):
+      pids, fids, rids, boxes = common.load_dataset(args.train_set, args.image_root)
+      max_fid_len = max(map(len, fids))  # We'll need this later for logfiles.
+    elif(args.csv_format == 'objectdetection'):
+      pids, fids, rids, boxes = common.load_objdetect_dataset(args.train_set, args.image_root)
+      max_fid_len = max(map(len, fids))  # We'll need this later for logfiles.
 
     # Setup a tf.Dataset where one "epoch" loops over all PIDS.
     # PIDS are shuffled after every epoch and continue indefinitely.
-    unique_pids = np.unique(pids)
-    dataset = tf.data.Dataset.from_tensor_slices(unique_pids)
-    dataset = dataset.shuffle(len(unique_pids))
+    if args.grouping:
+        unique_rids = np.unique(rids)
+        dataset = tf.data.Dataset.from_tensor_slices(unique_rids)
+        dataset = dataset.shuffle(len(unique_rids))
+        dataset = dataset.take(len(unique_rids))
+        dataset = dataset.repeat(None)  # Repeat forever. Funny way of stating it.
 
-    # Constrain the dataset size to a multiple of the batch-size, so that
-    # we don't get overlap at the end of each epoch.
-    dataset = dataset.take((len(unique_pids) // args.batch_p) * args.batch_p)
-    dataset = dataset.repeat(None)  # Repeat forever. Funny way of stating it.
+        dataset = dataset.map(lambda rid: sample_p_pids_for_rid(
+            rid, all_pids=pids, all_rids=rids, batch_p=args.batch_p))
+        dataset = dataset.apply(tf.data.experimental.unbatch())
+        # For every PID, get K images.
+        dataset = dataset.map(lambda pid, rid: sample_k_fids_for_pid(
+            pid, all_fids=fids, all_pids=pids, all_boxes=boxes, batch_k=args.batch_k))
 
-    # For every PID, get K images.
-    dataset = dataset.map(lambda pid: sample_k_fids_for_pid(
-        pid, all_fids=fids, all_pids=pids, batch_k=args.batch_k))
+    else:
+        unique_pids = np.unique(pids)
+        dataset = tf.data.Dataset.from_tensor_slices(unique_pids)
+        dataset = dataset.shuffle(len(unique_pids))
+        dataset = dataset.take((len(unique_pids) // args.batch_p) * args.batch_p)
+        dataset = dataset.repeat(None)
+
+        # For every PID, get K images.
+        dataset = dataset.map(lambda pid: sample_k_fids_for_pid(
+            pid, all_fids=fids, all_pids=pids, all_boxes=boxes, batch_k=args.batch_k))
 
     # Ungroup/flatten the batches for easy loading of the files.
     dataset = dataset.apply(tf.data.experimental.unbatch())
@@ -254,9 +315,11 @@ def main():
     # Convert filenames to actual image tensors.
     net_input_size = (args.net_input_height, args.net_input_width)
     pre_crop_size = (args.pre_crop_height, args.pre_crop_width)
+
     dataset = dataset.map(
-        lambda fid, pid: common.fid_to_image(
+        lambda fid, pid, box: common.fid_to_image(
             fid, pid, image_root=args.image_root,
+            box=box,
             image_size=pre_crop_size if args.crop_augment else net_input_size),
         num_parallel_calls=args.loading_threads)
 
@@ -268,6 +331,10 @@ def main():
         dataset = dataset.map(
             lambda im, fid, pid: (tf.image.random_crop(im, net_input_size + (3,)), fid, pid))
 
+    if args.debug_folder:
+        dataset = dataset.map(
+            lambda im, fid, pid: common.save_preprocessimage(im, fid, pid, args.debug_folder)
+        )
     # Group it back into PK batches.
     batch_size = args.batch_p * args.batch_k
     dataset = dataset.batch(batch_size)
@@ -420,7 +487,7 @@ def main():
                 # Save a checkpoint of training every so often.
                 if (args.checkpoint_frequency > 0 and
                         step % args.checkpoint_frequency == 0):
-                    
+
                     checkpoint_saver.save(sess, os.path.join(
                         args.experiment_root, 'checkpoint'), global_step=step)
 
@@ -434,7 +501,7 @@ def main():
         # when the process was interrupted.
         checkpoint_saver.save(sess, os.path.join(
             args.experiment_root, 'checkpoint'), global_step=step)
-        
+
 
 if __name__ == '__main__':
     main()
