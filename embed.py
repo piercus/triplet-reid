@@ -73,6 +73,14 @@ parser.add_argument(
     '--quiet', action='store_true', default=False,
     help='Don\'t be so verbose.')
 
+parser.add_argument(
+    '--csv_format', default='tripletreid',
+    help='type of csv, can be \'tripletreid\' (person1,/path/to/file1.png,group1) or \'objdetection\' (path/to/image.jpg,x1,y1,x2,y2,class_name,groupname)')
+
+parser.add_argument(
+    '--debug_folder',
+    help='Saved the pre-processed input into a specific folder')
+
 
 def flip_augment(image, fid, pid):
     """ Returns both the original and the horizontal flip of an image. """
@@ -146,18 +154,22 @@ def main():
             print('{}: {}'.format(key, value))
 
     # Load the data from the CSV file.
-    _, data_fids, rids = common.load_dataset(args.dataset, args.image_root)
+    if(args.csv_format == 'tripletreid'):
+      _, data_fids, rids, boxes = common.load_dataset(args.dataset, args.image_root)
+    elif(args.csv_format == 'objectdetection'):
+      _, data_fids, rids, boxes = common.load_objdetect_dataset(args.dataset, args.image_root)
 
     net_input_size = (args.net_input_height, args.net_input_width)
     pre_crop_size = (args.pre_crop_height, args.pre_crop_width)
 
     # Setup a tf Dataset containing all images.
-    dataset = tf.data.Dataset.from_tensor_slices(data_fids)
+    # arg = np.concatenate([np.expand_dims(data_fids, axis=1), boxes], axis=1)
+    dataset = tf.data.Dataset.from_tensor_slices((data_fids, boxes))
 
     # Convert filenames to actual image tensors.
     dataset = dataset.map(
-        lambda fid: common.fid_to_image(
-            fid, tf.constant('dummy'), image_root=args.image_root,
+        lambda fid, box: common.fid_to_image(
+            fid, tf.constant('dummy'), box=box, image_root=args.image_root,
             image_size=pre_crop_size if args.crop_augment else net_input_size),
         num_parallel_calls=args.loading_threads)
 
@@ -187,6 +199,11 @@ def main():
     else:
         modifiers = [o + '_resize' for o in modifiers]
 
+    if args.debug_folder:
+        dataset = dataset.map(
+            lambda im, fid, pid: common.save_preprocessimage(im, fid, pid, args.debug_folder)
+        )
+
     # Group it back into PK batches.
     dataset = dataset.batch(args.batch_size)
 
@@ -196,7 +213,6 @@ def main():
     images, _, _ = tf.compat.v1.data.make_one_shot_iterator(dataset).get_next()
 
     # Create the model and an embedding head.
-    print(args)
     model = import_module('nets.' + args.model_name)
     head = import_module('heads.' + args.head_name)
     images = tf.identity(images, name="images")
